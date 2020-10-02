@@ -1,0 +1,135 @@
+rm(list = ls())
+setwd('/Users/georgemaksour/Documents/University/Notes/MATH5836/assOne')
+
+#Insert Libraries in here
+install_keras()
+install.packages('tensorflow')
+install.packages('ggcorrplot')
+install.packages('GGally')
+install.packages('readr')
+
+
+library(ggcorrplot)
+library(ggplot2)
+library(GGally)
+library(keras)
+library(readr)
+library(dplyr)
+library(caret)
+library(pROC)
+library(PPROC)
+library(tensorflow)
+library(tidyr)
+
+
+
+#functions
+isNa <- function(x){
+  if (any(is.na(x))== TRUE){
+    na.omit(x)
+  }
+}
+
+#use these numbers and relate them to this infomration
+{
+"""
+column 1: Subject id
+
+colum 2-27: features
+features 1-5: Jitter (local),Jitter (local, absolute),Jitter (rap),Jitter (ppq5),Jitter (ddp),
+features 6-11: Shimmer (local),Shimmer (local, dB),Shimmer (apq3),Shimmer (apq5), Shimmer (apq11),Shimmer (dda),
+features 12-14: AC,NTH,HTN,
+features 15-19: Median pitch,Mean pitch,Standard deviation,Minimum pitch,Maximum pitch,
+features 20-23: Number of pulses,Number of periods,Mean period,Standard deviation of period, features 24-26: Fraction of locally unvoiced frames,Number of voice breaks,Degree of voice breaks
+
+column 28: UPDRS
+column 29: class information
+"""
+}
+
+data<-read.table('train_data.txt', header = FALSE, sep= ',', dec = '.')
+names(data) <- c(1:29)
+head(data)
+isNa(data)
+
+
+#now time to split up the data
+set.seed(123)
+index <- sample(2, nrow(data),replace = T, prob = c(0.6,0.4))
+trainData <- data[index ==1,1:ncol(data)]
+testData <- data[index == 2, 1:ncol(data)]
+outcomeTrain <- trainData[,ncol(trainData)]
+outcomeTest <- testData[, ncol(trainData)]
+trainData <- trainData[,-ncol(trainData)]
+testData <- testData[,-ncol(testData)]
+
+
+#time to look at some metrics
+#Desctiptive Statistics
+meanTrain <- apply(trainData,2,mean)
+stdTrain <- apply(trainData,2,sd)
+meanTrain 
+stdTrain
+
+#Now looking at Relationships firstly with just a matrix then visualize
+correlationMatrix <-as.matrix( cor(trainData, method = 'pearson'))
+ggcorrplot(correlationMatrix, hc.order = TRUE,  outline.col = "white", ggtheme = ggplot2::theme_gray, colors = c("#6D9EC1", "white", "#E46726"),insig= "blank")
+
+#There are some Interesting correlations here so lets have a look at all the graphs of all the correlations that bear some correlation
+#this can be done with a pair plot
+pairPlot <- trainData  %>% ggpairs(mapping = aes( alpha = 0.3), progress = FALSE)
+pairPlot
+
+#there is high correlation in these ares 1-5, 6-11,12-14,15-19, 20-23 and 24-26 and that happens to be that they are slight variants
+#of the same category of traits sucha s jittery. However we will plot 25-28
+plotData <-trainData[,25:28]
+pairPlot <- plotData %>% ggpairs(plotData, columns = 1:4)
+pairPlot
+
+
+#and right before we finish analysing the data it is now time to check distributions and see andy discernable patterns
+par(mfrow=c(4,7))
+loopVector <-1:ncol(data)
+for(i in loopVector){
+  vector <-trainData[,i]
+  hist(vector, main = paste("Hist Column:", i ), col = "tan4")
+}
+
+#need to normalise the data
+trainData <- scale(trainData, center= meanTrain, scale = stdTrain)
+testData <- scale(testData, center = meanTrain, scale = stdTrain)
+outcomeTrain <- as.factor(outcomeTrain)
+outcomeTest <- as.factor(outcomeTest)
+
+
+#Time to build a Neural network
+model <- keras_model_sequential()
+model %>% 
+  layer_dense(units = 256, kernel_regularizer = regularizer_l2(0.001),  activation = "relu", input_shape = c(21)) %>% 
+  layer_dense(units = 12, kernel_regularizer = regularizer_l2(0.001),  activation = "relu") %>% 
+  layer_dense(units = 2, activation ="sigmoid")
+summary(model)
+
+#The model requires compilation
+model %>% compile(loss = "categorical_crossentropy",  optimizer = "adam",  metrics = c("accuracy"))
+
+trainData <- as.matrix(trainData)
+outcomeTrain <- as.matrix(outcomeTrain)
+testData <- as.matrix(testData)
+outcomeTest <- as.matrix(outcomeTest)
+
+class(trainData)
+      class( outcomeTrain)
+             class(model)
+
+#now time to fit the model over the training Data we can get accuracy and loss out of this
+dataFit <- model %>% fit(model, x = trainData,y = outcomeTrain, epoch = 4, batch_size =638, validation_data = list(testData,outcomeTest))
+plot(dataFit)
+
+
+#######################
+Now I am getitng this error however I do not know where the 'float' and 'Sequential'
+
+Error in py_compare_impl(a, b, op) : 
+  TypeError: '>' not supported between instances of 'Sequential' and 'float'
+
